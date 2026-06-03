@@ -2,6 +2,24 @@
 
 A pixel-art desktop music player built with Electron, Vite, and React.
 
+*NOTE*
+
+I added some personal enhancements to this for my specific usecase of a youtube playlist. All credit to the original creator who made the rest of this repo: https://github.com/cupidbity/cupid-music-player 
+
+Link to my YouTube playlist is here: https://www.youtube.com/playlist?list=PLvT8KF5bMAFquyRMBXoQwf9fq2B959dW_ 
+
+Was able to download MP3 files using:
+
+```bash
+winget install yt-dlp.yt-dlp
+winget install Gyan.FFmpeg
+```
+
+Credits to them can be found here:
+
+yt-dlp: https://github.com/yt-dlp/yt-dlp
+ffmpeg: https://ffmpeg.org/download.html 
+
 ## Features
 
 - Pixel-art UI with animated record player, spinning vinyl, and needle
