@@ -1,19 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import playlist from './playlist';
 
-/**
- * Local audio player hook (HTML5 Audio).
- *
- * When used directly, plays from the local playlist.
- * The App component chooses between this and useSpotifyPlayer
- * based on the active source.
- */
 export default function useAudioPlayer(playMode = 'normal') {
   const audioRef = useRef(new Audio());
   const playModeRef = useRef(playMode);
   playModeRef.current = playMode;
+  const [playlist, setPlaylist] = useState([]);
   const [trackIndex, setTrackIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const isPlayingRef = useRef(false);
+  isPlayingRef.current = isPlaying;
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -23,36 +18,36 @@ export default function useAudioPlayer(playMode = 'normal') {
   });
   const [muted, setMuted] = useState(false);
 
-  const track = playlist[trackIndex];
   const audio = audioRef.current;
   audio.volume = muted ? 0 : volume;
 
-  // Load track when index changes
+  // Load tracks from the audio folder on mount
   useEffect(() => {
-    audio.src = `./${track.file}`;
-    audio.load();
-    setProgress(0);
-    setCurrentTime(0);
-    setDuration(0);
+    window.cupid.getLocalTracks().then(tracks => setPlaylist(tracks));
+  }, []);
 
-    if (isPlaying) {
-      audio.play().catch(() => {});
-    }
-  }, [trackIndex]);
+  const track = playlist[trackIndex] ?? { file: '', title: 'Loading...', artist: '', art: '' };
 
-  // Time update listener
+  // Load track when index or file changes
+  useEffect(() => {
+    if (!track.file) return;
+    window.cupid.getAudioPath(track.file).then((url) => {
+      audio.src = url;
+      audio.load();
+      setProgress(0);
+      setCurrentTime(0);
+      setDuration(0);
+      if (isPlayingRef.current) audio.play().catch(() => {});
+    });
+  }, [trackIndex, track.file]);
+
+  // Audio event listeners
   useEffect(() => {
     const onTimeUpdate = () => {
       setCurrentTime(audio.currentTime);
-      if (audio.duration) {
-        setProgress(audio.currentTime / audio.duration);
-      }
+      if (audio.duration) setProgress(audio.currentTime / audio.duration);
     };
-
-    const onLoadedMetadata = () => {
-      setDuration(audio.duration);
-    };
-
+    const onLoadedMetadata = () => setDuration(audio.duration);
     const onEnded = () => {
       if (playModeRef.current === 'repeat') {
         audio.currentTime = 0;
@@ -72,13 +67,12 @@ export default function useAudioPlayer(playMode = 'normal') {
     audio.addEventListener('timeupdate', onTimeUpdate);
     audio.addEventListener('loadedmetadata', onLoadedMetadata);
     audio.addEventListener('ended', onEnded);
-
     return () => {
       audio.removeEventListener('timeupdate', onTimeUpdate);
       audio.removeEventListener('loadedmetadata', onLoadedMetadata);
       audio.removeEventListener('ended', onEnded);
     };
-  }, []);
+  }, [playlist.length]);
 
   const play = useCallback(() => {
     audio.play().catch(() => {});
@@ -104,7 +98,7 @@ export default function useAudioPlayer(playMode = 'normal') {
       }
       return (prev + 1) % playlist.length;
     });
-  }, []);
+  }, [playlist.length]);
 
   const prev = useCallback(() => {
     if (audio.currentTime > 3) {
@@ -112,12 +106,10 @@ export default function useAudioPlayer(playMode = 'normal') {
     } else {
       setTrackIndex((prev) => (prev - 1 + playlist.length) % playlist.length);
     }
-  }, []);
+  }, [playlist.length]);
 
   const seek = useCallback((fraction) => {
-    if (audio.duration) {
-      audio.currentTime = Math.min(fraction, 1) * audio.duration;
-    }
+    if (audio.duration) audio.currentTime = Math.min(fraction, 1) * audio.duration;
   }, []);
 
   const setVolume = useCallback((v) => {
@@ -137,12 +129,16 @@ export default function useAudioPlayer(playMode = 'normal') {
 
   return {
     track,
+    playlist,
+    setPlaylist,
     trackIndex,
+    setTrackIndex,
     isPlaying,
     progress,
     duration,
     currentTime,
     togglePlay,
+    play,
     next,
     prev,
     seek,

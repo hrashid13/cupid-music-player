@@ -181,6 +181,10 @@ export default function App() {
   const [needleLifted, setNeedleLifted] = useState(false);
   const [starHovered, setStarHovered] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showPlaylist, setShowPlaylist] = useState(false);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
+  const dragSrcIndexRef = useRef(null);
+  const activeItemRef = useRef(null);
   const [dragging, setDragging] = useState(false);
   const [hoverProgress, setHoverProgress] = useState(null);
   const seekRef = useRef(null);
@@ -272,6 +276,30 @@ export default function App() {
     }, 1100);
 
   }, [track.title, needleLifted]);
+
+  const { playlist, setPlaylist, trackIndex, setTrackIndex, play } = local;
+
+  // Auto-scroll playlist to keep active track visible
+  useEffect(() => {
+    if (!showPlaylist || !activeItemRef.current) return;
+    activeItemRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [trackIndex, showPlaylist]);
+
+  const handlePlaylistDrop = (dropIndex) => {
+    const from = dragSrcIndexRef.current;
+    dragSrcIndexRef.current = null;
+    setDragOverIndex(null);
+    if (from === null || from === dropIndex) return;
+    const playingTrack = playlist[trackIndex];
+    const next = [...playlist];
+    const [moved] = next.splice(from, 1);
+    const insertAt = dropIndex > from ? dropIndex - 1 : dropIndex;
+    next.splice(insertAt, 0, moved);
+    const newIdx = next.indexOf(playingTrack);
+    setPlaylist(next);
+    setTrackIndex(newIdx !== -1 ? newIdx : 0);
+    window.cupid?.savePlaylistOrder(next.map(t => t.file));
+  };
 
   const resizeTL = useResize('top-left');
   const resizeTR = useResize('top-right');
@@ -428,7 +456,7 @@ export default function App() {
         onMouseDown={(e) => {
           e.preventDefault();
           setDragging(true);
-          const rect = e.currentTarget.getBoundingClientRect();
+          const rect = seekRef.current.getBoundingClientRect();
           const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
           setHoverProgress(pct);
           seek(pct);
@@ -490,7 +518,12 @@ export default function App() {
       <div className="btn btn-exit" onClick={() => window.cupid?.close()} />
 
       {/* Settings button */}
-      <div className="btn btn-settings" onClick={() => setShowSettings((v) => !v)} />
+      <div className="btn btn-settings" onClick={() => { setShowSettings((v) => !v); setShowPlaylist(false); }} />
+
+      {/* Playlist button — local source only */}
+      {source === 'local' && (
+        <div className="btn btn-playlist" onClick={() => { setShowPlaylist((v) => !v); setShowSettings(false); }}>&#9776;</div>
+      )}
 
       {/* Debug overlays — toggle with showDebug state */}
       {showDebug && (
@@ -502,6 +535,44 @@ export default function App() {
           <div className="debug-overlay volume-bar-area-debug" />
           <div className="debug-overlay btn btn-playmode" />
         </>
+      )}
+
+      {/* Playlist panel */}
+      {showPlaylist && source === 'local' && (
+        <div
+          className="playlist-panel"
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget)) setDragOverIndex(null);
+          }}
+        >
+          {playlist.length === 0 ? (
+            <div className="playlist-item">loading...</div>
+          ) : (
+            <>
+              {playlist.map((t, i) => (
+                <div
+                  key={t.file || i}
+                  ref={i === trackIndex ? activeItemRef : null}
+                  className={`playlist-item${i === trackIndex ? ' active' : ''}${dragOverIndex === i ? ' drag-over' : ''}`}
+                  draggable
+                  onDragStart={() => { dragSrcIndexRef.current = i; }}
+                  onDragOver={(e) => { e.preventDefault(); setDragOverIndex(i); }}
+                  onDrop={(e) => { e.preventDefault(); handlePlaylistDrop(i); }}
+                  onDragEnd={() => { dragSrcIndexRef.current = null; setDragOverIndex(null); }}
+                  onClick={() => { setTrackIndex(i); if (!isPlaying) play(); }}
+                >
+                  <span className="playlist-num">{i + 1}.</span>
+                  <span className="playlist-title">{t.title}</span>
+                </div>
+              ))}
+              <div
+                className={`playlist-end-drop${dragOverIndex === playlist.length ? ' drag-over' : ''}`}
+                onDragOver={(e) => { e.preventDefault(); setDragOverIndex(playlist.length); }}
+                onDrop={(e) => { e.preventDefault(); handlePlaylistDrop(playlist.length); }}
+              />
+            </>
+          )}
+        </div>
       )}
 
       {/* Settings panel */}

@@ -55,8 +55,6 @@ function generateAppleMusicToken() {
 }
 
 // ── yt-dlp stream URL fetcher ────────────────────────────
-// streamCache: stream URLs (expire after ~30min on YT's side)
-// videoIdCache: title → video ID, persisted so repeat lookups skip search
 const streamCache = new Map();
 const pendingRequests = new Map();
 const videoIdCache = new Map();
@@ -97,9 +95,6 @@ function getYtDlpPath() {
 
 const YT_ID_RE = /^[A-Za-z0-9_-]{11}$/;
 
-// youtubei.js handles YT Music search (audio uploads, not music videos).
-// URL extraction stays on yt-dlp — YT now withholds stream URLs from WEB
-// client responses without a PoToken, which youtubei.js can't generate.
 let innertubePromise = null;
 function getInnertube() {
   if (innertubePromise) return innertubePromise;
@@ -158,7 +153,6 @@ async function ytDlpSearch(title, artist) {
   return { id, url };
 }
 
-// videoId → { url, time }. yt-dlp URLs last ~30min — same TTL as streamCache
 const decipheredCache = new Map();
 const pendingDecipher = new Map();
 
@@ -203,14 +197,12 @@ async function getStreamUrl(title, artist) {
           console.warn('[youtubei search] fallback to yt-dlp:', err.message);
           const result = await ytDlpSearch(title, artist);
           videoId = result.id;
-          // We already have a usable URL from yt-dlp — seed the decipher cache
           decipheredCache.set(videoId, { url: result.url, time: Date.now() });
         }
         videoIdCache.set(cacheKey, videoId);
         persistVideoIdCache();
       }
 
-      // Best-effort pre-warm so the renderer's protocol fetch hits the decipher cache
       resolveStreamUrl(videoId).catch(() => {});
 
       const url = `cupid-audio://stream?id=${encodeURIComponent(videoId)}`;
@@ -227,11 +219,14 @@ async function getStreamUrl(title, artist) {
 
 const isDev = process.env.NODE_ENV === 'development';
 
-// Scale factor for pixel art
-// Actual drawing area within 526x526 canvas: 306x497
-// (23px top at bow, 110px left, 110px right, 6px bottom at heart)
 const WIDTH = 415;
-const HEIGHT = Math.round(415 * (497 / 306)); // maintain 306:497 aspect ratio
+const HEIGHT = Math.round(415 * (497 / 306));
+
+function getAudioDir() {
+  return isDev
+    ? path.join(__dirname, '..', 'audio')
+    : path.join(process.resourcesPath, 'audio');
+}
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -247,24 +242,21 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      webSecurity: false,
     },
   });
 
-  // Lock aspect ratio so only proportional resizing is allowed
   const ASPECT = WIDTH / HEIGHT;
   win.setAspectRatio(ASPECT);
 
-  // Window control handlers
   let preMaxBounds = null;
 
   const onMinimize = () => win.minimize();
   const onMaximize = () => {
     if (preMaxBounds) {
-      // Restore to previous size
       win.setBounds(preMaxBounds);
       preMaxBounds = null;
     } else {
-      // Fit to screen while maintaining aspect ratio
       preMaxBounds = win.getBounds();
       const { workArea } = screen.getPrimaryDisplay();
       let newWidth = workArea.width;
@@ -365,7 +357,6 @@ function createWindow() {
   ipcMain.on('open-external', onOpenExternal);
   ipcMain.on('set-theme', onSetTheme);
 
-  // Clean up IPC listeners when window is destroyed
   win.on('closed', () => {
     ipcMain.removeListener('window-minimize', onMinimize);
     ipcMain.removeListener('window-maximize', onMaximize);
@@ -375,7 +366,6 @@ function createWindow() {
     ipcMain.removeListener('set-theme', onSetTheme);
   });
 
-  // Handle Spotify OAuth callback in production.
   win.webContents.on('will-navigate', (event, url) => {
     try {
       const parsed = new URL(url);
@@ -397,7 +387,6 @@ function createWindow() {
     }
   });
 
-  // Toggle DevTools with Cmd+Shift+I / Ctrl+Shift+I / F12
   win.webContents.on('before-input-event', (_e, input) => {
     if (input.type !== 'keyDown') return;
     const isDevToolsShortcut = input.key.toLowerCase() === 'i' && input.shift && (input.meta || input.control);
@@ -413,7 +402,7 @@ function createWindow() {
   }
 }
 
-// ── Global IPC handlers (persist across window reloads) ──
+// ── Global IPC handlers ──────────────────────────────────
 ipcMain.handle('get-apple-music-token', () => {
   return generateAppleMusicToken();
 });
@@ -424,6 +413,49 @@ ipcMain.handle('get-stream-url', async (_e, title, artist) => {
   } catch (err) {
     throw new Error(`Failed to get stream: ${err.message}`);
   }
+});
+
+ipcMain.handle('get-local-tracks', async () => {
+  try {
+    const files = fs.readdirSync(getAudioDir()).filter(f => f.endsWith('.mp3'));
+    const tracks = files.map(file => ({
+      file,
+      title: file.replace(/^\d+ - /, '').replace(/\.mp3$/, ''),
+      artist: '',
+      album: '',
+      art: '',
+    }));
+
+    try {
+      const orderFile = path.join(app.getPath('userData'), 'playlist-order.json');
+      const savedOrder = JSON.parse(fs.readFileSync(orderFile, 'utf8'));
+      const trackMap = new Map(tracks.map(t => [t.file, t]));
+      const ordered = savedOrder.filter(f => trackMap.has(f)).map(f => trackMap.get(f));
+      // append any new files not yet in the saved order
+      const inOrder = new Set(savedOrder);
+      for (const t of tracks) {
+        if (!inOrder.has(t.file)) ordered.push(t);
+      }
+      return ordered;
+    } catch {
+      return tracks;
+    }
+  } catch {
+    return [];
+  }
+});
+
+ipcMain.handle('save-playlist-order', async (_e, fileOrder) => {
+  try {
+    const orderFile = path.join(app.getPath('userData'), 'playlist-order.json');
+    await fs.promises.writeFile(orderFile, JSON.stringify(fileOrder));
+  } catch (err) {
+    console.error('Failed to save playlist order:', err);
+  }
+});
+
+ipcMain.handle('get-audio-path', (_e, file) => {
+  return pathToFileURL(path.join(getAudioDir(), file)).href;
 });
 
 app.whenReady().then(() => {
@@ -462,7 +494,6 @@ app.whenReady().then(() => {
 
   createWindow();
 
-  // Pre-warm both engines so the first track load skips cold-start
   getInnertube().catch(() => {});
   execFile(getYtDlpPath(), ['--version'], () => {});
 

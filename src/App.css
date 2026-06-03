@@ -225,6 +225,109 @@
   color: #ff6b6b;
 }
 
+/* ── Playlist panel ─────────────────────────────────────── */
+
+.btn-playlist {
+  left: calc((283 - 110) / 306 * 100vw);
+  top: calc((48 - 23) / 306 * 100vw);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Rainyhearts', monospace;
+  font-size: calc(14 / 306 * 100vw);
+  color: var(--color-title);
+  opacity: 0.8;
+}
+
+.btn-playlist:hover {
+  opacity: 1;
+}
+
+.playlist-panel {
+  position: absolute;
+  top: calc((70 - 23) / 306 * 100vw);
+  right: calc(5 / 306 * 100vw);
+  z-index: 300;
+  -webkit-app-region: no-drag;
+  pointer-events: auto;
+  background: var(--color-primary);
+  border: calc(2 / 306 * 100vw) solid var(--color-secondary);
+  border-radius: calc(4 / 306 * 100vw);
+  padding: calc(6 / 306 * 100vw);
+  width: calc(160 / 306 * 100vw);
+  max-height: calc(260 / 306 * 100vw);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: calc(2 / 306 * 100vw);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-secondary) transparent;
+}
+
+.playlist-panel::-webkit-scrollbar {
+  width: calc(3 / 306 * 100vw);
+}
+
+.playlist-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.playlist-panel::-webkit-scrollbar-thumb {
+  background: var(--color-secondary);
+  border-radius: calc(2 / 306 * 100vw);
+}
+
+.playlist-item {
+  font-family: 'Rainyhearts', monospace;
+  font-size: calc(11 / 306 * 100vw);
+  color: var(--color-panel-text);
+  padding: calc(5 / 306 * 100vw) calc(4 / 306 * 100vw);
+  border-radius: calc(2 / 306 * 100vw);
+  border: calc(1 / 306 * 100vw) solid transparent;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  gap: calc(4 / 306 * 100vw);
+  user-select: none;
+}
+
+.playlist-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.playlist-item.active {
+  background: var(--color-panel-text);
+  color: var(--color-primary);
+}
+
+.playlist-item.drag-over {
+  border-top-color: var(--color-panel-text);
+}
+
+.playlist-num {
+  flex-shrink: 0;
+  opacity: 0.65;
+}
+
+.playlist-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.playlist-end-drop {
+  flex-shrink: 0;
+  height: calc(10 / 306 * 100vw);
+  border-top: calc(1 / 306 * 100vw) solid transparent;
+  border-radius: calc(2 / 306 * 100vw);
+}
+
+.playlist-end-drop.drag-over {
+  border-top-color: var(--color-panel-text);
+}
+
 /* Volume hover zone — covers icon + bar area as one block */
 .volume-hover-zone {
   position: absolute;

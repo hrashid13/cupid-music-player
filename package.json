@@ -60,7 +60,7 @@
       "icon": "assets/pink/icon.png"
     },
     "win": {
-      "target": "nsis",
+      "target": "dir",
       "icon": "assets/pink/icon.png"
     },
     "linux": {
